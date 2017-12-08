@@ -266,6 +266,111 @@
       }
     }
 
+    protected void Relink(
+        [NotNull] string targetDatabaseName,
+        [NotNull] string targetItemID,
+        string targetPath,
+        [NotNull] string sourceDatabaseName,
+        [NotNull] string sourceItemID,
+        [NotNull] string sourceFieldID,
+        [NotNull] string linkID,
+        [NotNull] string sourceItemLanguage,
+        [NotNull] string sourceItemVersion)
+    {
+      Assert.ArgumentNotNullOrEmpty(targetDatabaseName, "targetDatabaseName");
+      Assert.ArgumentNotNullOrEmpty(targetItemID, "targetItemID");
+      Assert.ArgumentNotNullOrEmpty(sourceDatabaseName, "sourceDatabaseName");
+      Assert.ArgumentNotNullOrEmpty(sourceItemID, "sourceItemID");
+      Assert.ArgumentNotNullOrEmpty(sourceFieldID, "sourceFieldID");
+      Assert.ArgumentNotNullOrEmpty(linkID, "linkID");
+      Assert.ArgumentNotNullOrEmpty(sourceItemLanguage, "sourceItemLanguage");
+      Assert.ArgumentNotNullOrEmpty(sourceItemVersion, "sourceItemVersion");
+
+      var args = Context.ClientPage.CurrentPipelineArgs as ClientPipelineArgs;
+      Assert.IsNotNull(args, typeof(ClientPipelineArgs));
+
+      Database database = Factory.GetDatabase(targetDatabaseName);
+      Assert.IsNotNull(database, typeof(Database), "Database: {0}", targetDatabaseName);
+
+      Item targetItem = database.GetItem(targetItemID);
+      Assert.IsNotNull(targetItem, typeof(Item), "ID: {0}", targetItemID);
+
+      Database sourceDatabase = Factory.GetDatabase(sourceDatabaseName);
+      Item sourceItem = sourceDatabase.Items[sourceItemID];
+      if (sourceItem == null)
+      {
+        return;
+      }
+
+      if (args.IsPostBack)
+      {
+        if (args.HasResult)
+        {
+          Assert.IsNotNull(Context.ContentDatabase, "content database");
+          Item item = Context.ContentDatabase.GetItem(args.Result);
+          Assert.IsNotNull(item, typeof(Item), "Item \"{0}\" not found", args.Result);
+
+          //Item[] versions = sourceItem.Versions.GetVersions(true);
+
+          Item[] versions = GetValidItemVersions(sourceDatabase, sourceItem, sourceItemID, sourceItemLanguage, sourceItemVersion);
+
+          foreach (Item version in versions)
+          {
+            Field sourceField = version.Fields[sourceFieldID];
+            if (sourceField == null)
+            {
+              continue;
+            }
+
+            CustomField customField = FieldTypeManager.GetField(sourceField);
+            if (customField == null)
+            {
+              continue;
+            }
+
+            using (new SecurityDisabler())
+            {
+              version.Editing.BeginEdit();
+
+              var itemLink = new ItemLink(
+                sourceDatabaseName,
+                ID.Parse(sourceItemID),
+                version.Language,
+                version.Version,
+                ID.Parse(sourceFieldID),
+                targetDatabaseName,
+                ID.Parse(targetItemID),
+                Language.Invariant,
+                Version.Latest,
+                targetPath);
+
+              customField.Relink(itemLink, item);
+
+              version.Editing.EndEdit();
+            }
+          }
+
+          SheerResponse.Remove(linkID);
+
+          SheerResponse.Alert(Texts.THE_LINK_HAS_BEEN_CHANGED);
+        }
+      }
+      else
+      {
+        var options = new SelectItemOptions();
+
+        options.Icon = "Network/16x16/link_new.png";
+        options.Title = Texts.RELINK;
+        options.Text = Texts.SELECT_THE_ITEM_THAT_YOU_WANT_THE_LINK_TO_POINT_TO_THEN_CLICK_RELINK_TO_SET_THE_LINK;
+        options.ButtonText = "Relink";
+        options.SelectedItem = targetItem;
+
+        SheerResponse.ShowModalDialog(options.ToUrlString().ToString(), true);
+
+        args.WaitForPostBack();
+      }
+    }
+
     /// <summary>
     /// Removes the specified database name.
     /// </summary>
