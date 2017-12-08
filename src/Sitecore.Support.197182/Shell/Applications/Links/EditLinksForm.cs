@@ -21,6 +21,7 @@
   using Sitecore.Web.UI.Sheer;
 
   using Version = Sitecore.Data.Version;
+  using Sitecore.Data.Managers;
 
   /// <summary>
   /// Represents a BreakingLinksForm.
@@ -361,6 +362,83 @@
       SheerResponse.Alert(Texts.THE_LINK_HAS_BEEN_REMOVED);
     }
 
+    protected void Remove(
+          [NotNull] string targetDatabaseName,
+          [NotNull] string targetItemID,
+          string targetPath,
+          [NotNull] string sourceDatabaseName,
+          [NotNull] string sourceItemID,
+          [NotNull] string sourceFieldID,
+          [NotNull] string linkID,
+          [NotNull] string sourceItemLanguage,
+          [NotNull] string sourceItemVersion)
+    {
+      Assert.ArgumentNotNullOrEmpty(targetDatabaseName, "targetDatabaseName");
+      Assert.ArgumentNotNullOrEmpty(targetItemID, "targetItemID");
+      Assert.ArgumentNotNullOrEmpty(sourceDatabaseName, "sourceDatabaseName");
+      Assert.ArgumentNotNullOrEmpty(sourceItemID, "sourceItemID");
+      Assert.ArgumentNotNullOrEmpty(sourceFieldID, "sourceFieldID");
+      Assert.ArgumentNotNullOrEmpty(linkID, "linkID");
+      Assert.ArgumentNotNullOrEmpty(sourceItemLanguage, "sourceItemLanguage");
+      Assert.ArgumentNotNullOrEmpty(sourceItemVersion, "sourceItemVersion");
+
+      Database database = Factory.GetDatabase(targetDatabaseName);
+      Assert.IsNotNull(database, typeof(Database), "Database: {0}", targetDatabaseName);
+
+      Item targetItem = database.GetItem(targetItemID);
+      Assert.IsNotNull(targetItem, typeof(Item), "ID: {0}", targetItemID);
+
+      Database sourceDatabase = Factory.GetDatabase(sourceDatabaseName);
+      Item sourceItem = sourceDatabase.Items[sourceItemID];
+
+      if (sourceItem == null)
+      {
+        return;
+      }
+
+      Item[] versions = GetValidItemVersions(sourceDatabase, sourceItem, sourceItemID, sourceItemLanguage, sourceItemVersion);
+      //sourceItem.Versions.GetVersions(true);
+
+      foreach (Item version in versions)
+      {
+        Field sourceField = version.Fields[sourceFieldID];
+        if (sourceField == null)
+        {
+          continue;
+        }
+
+        CustomField customField = FieldTypeManager.GetField(sourceField);
+        if (customField == null)
+        {
+          continue;
+        }
+
+        using (new SecurityDisabler())
+        {
+          version.Editing.BeginEdit();
+
+          var itemLink = new ItemLink(
+            sourceDatabaseName,
+            ID.Parse(sourceItemID),
+            version.Language,
+            version.Version,
+            ID.Parse(sourceFieldID),
+            targetDatabaseName,
+            ID.Parse(targetItemID),
+            Language.Invariant,
+            Version.Latest,
+            targetPath);
+
+          customField.RemoveLink(itemLink);
+
+          version.Editing.EndEdit();
+        }
+      }
+
+      SheerResponse.Remove(linkID);
+
+      SheerResponse.Alert(Texts.THE_LINK_HAS_BEEN_REMOVED);
+    }
     #endregion
 
     #region Private methods
@@ -479,7 +557,8 @@
 
           string parameters = "(\"" + link.TargetDatabaseName + "\",\"" + link.TargetItemID + "\",\"" + link.TargetPath +
                               "\",\"" + link.SourceDatabaseName + "\",\"" + link.SourceItemID + "\",\"" +
-                              link.SourceFieldID + "\",\"" + id + "\")";
+                              link.SourceFieldID + "\",\"" + id + "\",\"" + link.SourceItemLanguage.Name +
+                              "\",\"" + link.SourceItemVersion.ToString() + "\")";
 
           string removeClick = "Remove" + parameters;
           string relinkClick = "Relink" + parameters;
@@ -579,6 +658,36 @@
       this.Links.InnerHtml = output.InnerWriter.ToString();
     }
 
+    private Item[] GetValidItemVersions(Database sourceDatabase, Item sourceItem,
+            string sourceItemID, string sourceItemLanguage, string sourceItemVersion)
+    {
+      Version sourceVersion;
+      Version.TryParse(sourceItemVersion, out sourceVersion);
+      Language sourceLanguage = LanguageManager.GetLanguage(sourceItemLanguage);
+
+      Item[] versions = new Item[0];
+
+      if (sourceLanguage != null)
+      {
+        if (sourceVersion != null)
+        {
+          Item tempItem = sourceDatabase.GetItem(sourceItemID, sourceLanguage, sourceVersion);
+
+          if (tempItem != null)
+            versions = new Item[] { tempItem };
+        }
+        else
+        {
+          versions = sourceItem.Versions.GetVersions(false);
+        }
+      }
+      else
+      {
+        versions = sourceItem.Versions.GetVersions(true);
+      }
+
+      return versions;
+    }
     #endregion
   }
 }
