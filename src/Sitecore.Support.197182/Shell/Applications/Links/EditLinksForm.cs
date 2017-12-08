@@ -38,6 +38,22 @@
 
     #region Protected methods
 
+    protected void Edit([NotNull] string id, [NotNull] string language, [NotNull] string version)
+    {
+      Assert.ArgumentNotNullOrEmpty(id, "id");
+      Assert.ArgumentNotNullOrEmpty(language, "language");
+      Assert.ArgumentNotNullOrEmpty(version, "version");
+
+      var url = new UrlString("/sitecore/shell/Applications/Content Manager/default.aspx");
+
+      url.Append("fo", id);
+      url.Append("mo", "popup");
+      url.Append("la", language);
+      url.Append("vs", version);
+
+      Context.ClientPage.ClientResponse.ShowModalDialog(url.ToString(), "900", "560");
+    }
+
     /// <summary>
     /// Edits the specified database name.
     /// </summary>
@@ -419,6 +435,18 @@
           WriteDivider(output);
 
           output.Write("<div class=\"scLinkField\">");
+          output.Write(Translate.Text(Texts.LANGUAGE1));
+          output.Write(' ');
+          output.Write(link.SourceItemLanguage.Name);
+          output.Write("</div>");
+
+          output.Write("<div class=\"scLinkField\">");
+          output.Write(Translate.Text(Texts.VERSION));
+          output.Write(": ");
+          output.Write(link.SourceItemVersion.ToString());
+          output.Write("</div>");
+
+          output.Write("<div class=\"scLinkField\">");
           output.Write(Translate.Text(Texts.FIELD));
           output.Write(' ');
           if (link.SourceFieldID.IsNull)
@@ -456,7 +484,9 @@
           string removeClick = "Remove" + parameters;
           string relinkClick = "Relink" + parameters;
 
-          WriteCommand(output, "Edit", "Applications/16x16/edit.png", "Edit(\"" + referer.ID + "\")");
+          WriteCommand(output, "Edit", "Applications/16x16/edit.png", "Edit(\"" + referer.ID + "\",\"" +
+                        link.SourceItemLanguage.Name + "\",\"" +
+                        link.SourceItemVersion.ToString() + "\")");
           WriteCommand(output, "Remove Link", "Network/16x16/link_delete.png", removeClick);
           WriteCommand(output, "Link to Other Item", "Network/16x16/link_new.png", relinkClick);
 
